@@ -1,58 +1,56 @@
-// あなたのブログ専用のAIチャットプログラム
 export default async function handler(req, res) {
-  // CORS設定（WordPressからのアクセスを許可する）
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    // CORS（別サイトからの通信）を許可する設定
+    res.setHeader('Access-Control-Allow-Credentials', true);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+    // OPTIONSリクエスト（事前確認）への即時返答
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
 
-  const { message } = req.body;
-  const apiKey = process.env.GEMINI_API_KEY;
+    const { message } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
 
-  if (!apiKey) {
-    return res.status(500).json({ error: 'Gemini API key is not configured.' });
-  }
+    if (!apiKey) {
+        return res.status(200).json({ reply: '申し訳ありません。AIの鍵（APIキー）が設定されていません。' });
+    }
 
-  // AIに教え込む、あなたのブログ記事の情報（プロンプト）
-  const systemInstruction = `
-あなたはブログ「harbor-notes.com」の親切な案内助手です。
-あなたの任務は、読者の質問に対して優しく答えつつ、ブログ内にある関連する記事を案内することです。
+    try {
+        // 現在のGeminiの最新仕様に合わせた確実な通信
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: "あなたは親切な外航船の航海士ナビゲーターAIです。質問に対して、専門知識を交えつつ分かりやすく日本語で答えてください。\n\n質問: " + message
+                    }]
+                }]
+            })
+        });
 
-【あなたのブログの最重要記事】
-■タイトル：外航船の航海士とは？世界の海を支えるプロフェッショナルの仕事
-■URL：https://harbor-notes.com/onboard-job/navigator/
-■概要：外航船の航海士の具体的な仕事内容や、世界の海を舞台に活躍するプロフェッショナルの魅力を伝える記事。
+        const data = await response.json();
+        
+        // 返答データの解析（ズレが起きないよう安全に抽出）
+        if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+            const replyText = data.candidates[0].content.parts[0].text;
+            return res.status(200).json({ reply: replyText });
+        } else {
+            console.error('Gemini Error Response:', JSON.stringify(data));
+            return res.status(200).json({ reply: '申し訳ありません。うまく聞き取れませんでした。' });
+        }
 
-ユーザーから「航海士」「仕事内容」「外航船」「船乗り」に関する質問や、それに関連する法律・安全に関する話題が出たら、必ずこの記事のタイトルとURLを添えて、この記事を読むことをおすすめしてください。
-もし全く関係のない質問（例：料理のレシピなど）をされた場合は、丁寧に雑談に応じつつも、「当ブログでは船や航海士に関する情報を発信しています」とアピールしてください。
-`;
-
-  try {
-    // Gemini APIを呼び出す
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          { role: 'user', parts: [{ text: systemInstruction + "\n\nユーザーからの質問: " + message }] }
-        ]
-      })
-    });
-
-    const data = await response.json();
-    const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "申し訳ありません。うまく聞き取れませんでした。";
-
-    // ここで一旦AIの回答を返します（※ログ保存は次のステップで行います）
-    return res.status(200).json({ reply: replyText });
-
-  } catch (error) {
-    return res.status(500).json({ error: error.message });
-  }
+    } catch (error) {
+        console.error('Fetch Error:', error);
+        return res.status(200).json({ reply: '通信エラーが発生しました。' });
+    }
 }
