@@ -5,7 +5,7 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
-    // OPTIONSリクエスト（事前確認）への即時返答
+    // OPTIONSリクエストへの即時返答
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;
@@ -23,8 +23,8 @@ export default async function handler(req, res) {
     }
 
     try {
-        // 現在のGeminiの最新仕様に合わせた確実な通信
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        // ドキュメント通りの最新モデル「gemini-3.5-flash」のエンドポイントに修正
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -40,13 +40,13 @@ export default async function handler(req, res) {
 
         const data = await response.json();
         
-        // 返答データの解析（ズレが起きないよう安全に抽出）
+        // 返答データの解析
         if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
             const replyText = data.candidates[0].content.parts[0].text;
             return res.status(200).json({ reply: replyText });
         } else {
             console.error('Gemini Error Response:', JSON.stringify(data));
-            return res.status(200).json({ reply: '申し訳ありません。うまく聞き取れませんでした。' });
+            return res.status(200).json({ reply: '申し訳ありません。AIからの応答が解析できませんでした。' });
         }
 
     } catch (error) {
